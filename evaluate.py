@@ -37,15 +37,23 @@ def main() -> None:
 
     state = QuizState.model_validate_json(session_file.read_text(encoding="utf-8"))
 
-    if not state.history:
+    all_questions = (
+        state.history
+        + ([state.current_question] if state.current_question else [])
+        + state.pending_questions
+    )
+
+    if not all_questions:
         print("No questions found in this session.")
         sys.exit(0)
 
-    print(f"Evaluating {len(state.history)} question(s)...\n")
+    print(f"Evaluating {len(all_questions)} question(s)...\n")
     judge = Judge(client=OpenAI(api_key=os.environ["OPENAI_API_KEY"]))
-    rubrics = judge.evaluate(state.history, state.urls)
+    rubrics = judge.evaluate(all_questions, state.urls)
 
     for rubric in rubrics:
+        if rubric.groundedness_score <= 2 or rubric.uniqueness_score <= 2:
+            continue
         print(f"Q: {rubric.question.question}")
         print(f"  Groundedness : {rubric.groundedness_score}/5 — {rubric.groundedness_reasoning}")
         print(f"  Uniqueness   : {rubric.uniqueness_score}/5 — {rubric.uniqueness_reasoning}")
